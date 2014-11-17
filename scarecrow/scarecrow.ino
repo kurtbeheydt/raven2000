@@ -1,5 +1,6 @@
 #include <Stepper.h>
-
+#include <YunClient.h>
+#include <YunServer.h>
 
 #define pinVerticalStop 2
 
@@ -24,12 +25,13 @@ int maxHorizontalPosition = 600;
 #define pinMovementRight 3
 
 #define pinOpticalSensor 5
-#define thresholdOpticalSensor 150  
+#define thresholdOpticalSensor 400  
 
 byte action;
 #define ACTION_STARTUP 0
 #define ACTION_READY 1
 
+YunServer server;
 
 
 void setup() {
@@ -40,18 +42,21 @@ void setup() {
   pinMode(pinMovementRight, INPUT);
   digitalWrite(pinMovementRight, HIGH);
   
-  Serial.begin(9600);
+  Bridge.begin();
+  server.listenOnLocalhost();
+  server.begin();
+
+  Serial.begin(19200);
   delay(500);
   Serial.println("");
   
   action = ACTION_STARTUP;
   initHorizontal();
- 
 }
 
 void loop() {
   readInput();
-  //readOpticalSensor(pinOpticalSensor);
+  readRemoteInput();
   
   moveHorizontal();
 }
@@ -64,10 +69,40 @@ void readInput() {
   } else if (!digitalRead(pinMovementRight)) {
     newHorizontalPosition++;
   }
-  Serial.print("current: ");
-  Serial.print(currentHorizontalPosition);
-  Serial.print("New: ");
-  Serial.println(newHorizontalPosition);
+  // Serial.print("current: ");
+  // Serial.print(currentHorizontalPosition);
+  // Serial.print(" - new: ");
+  // Serial.println(newHorizontalPosition);
+}
+
+void readRemoteInput() {
+  YunClient client = server.accept();
+  if (client) {
+    client.setTimeout(5);
+    
+    String command = client.readStringUntil('/');
+    command.trim();
+    
+    if (command == "left") { // http://michelle.local/arduino/left
+      newHorizontalPosition--;
+    } else if (command == "right") {
+      newHorizontalPosition++;
+    } else if (command == "bigleft") {
+      newHorizontalPosition = newHorizontalPosition - 10;
+    } else if (command == "bigright") {
+      newHorizontalPosition = newHorizontalPosition + 10;
+    } 
+
+    Serial.print("Command received: ");
+    Serial.print(command);
+
+    client.println("Status: 200");
+    client.println("Content-type: application/json");
+    client.println();
+    client.print("{\"status\":\"ok\"}");
+    client.stop();
+  }
+  delay(50);
 }
 
 void initHorizontal() {
@@ -107,7 +142,6 @@ void moveHorizontal() {
       horizontalStepper.step(-1);
     }
   }
-//  delay(10);
 }
 
 bool readVerticalSensor() {

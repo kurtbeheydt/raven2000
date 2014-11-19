@@ -2,45 +2,63 @@
 #include <YunClient.h>
 #include <YunServer.h>
 
-#define pinVerticalStop 2
+#define pinMovementLeft A1
+#define pinMovementRight A2
+#define pinMovementUp A3
+#define pinMovementDown A4
+#define pinFire A5
 
-#define pinHorizontalStepA 8
-#define pinHorizontalDirectionA 9
-#define pinHorizontalStepB 10
-#define pinHorizontalDirectionB 11
+#define pinVerticalStepA 4
+#define pinVerticalDirectionA 5
+#define pinVerticalStepB 6
+#define pinVerticalDirectionB 7
+
+#define pinVerticalStopSensor 8
+
+#define pinHorizontalStepB 9
+#define pinHorizontalDirectionB 10
+#define pinHorizontalStepA 11
+#define pinHorizontalDirectionA 12
+
+#define pinHorizontalStopSensor 3
+#define thresholdOpticalSensor 300 
 
 #define pinMovementSpeedPotentio 0
 
+#define pinValveOff 13
+#define pinValveOn 2
+#define durationValveOpen 500
 
 #define STEPS 100
 
 
 Stepper horizontalStepper(STEPS, pinHorizontalStepA, pinHorizontalDirectionA, pinHorizontalStepB, pinHorizontalDirectionB);
+Stepper verticalStepper(STEPS, pinVerticalStepA, pinVerticalDirectionA, pinVerticalStepB, pinVerticalDirectionB);
 
-int currentHorizontalPosition, newHorizontalPosition, movementSpeed;
+int currentHorizontalPosition, newHorizontalPosition, currentVerticalPosition, newVerticalPosition, movementSpeed;
+
+bool fire = false;
 int maxHorizontalPosition = 600;
-
-
-#define pinMovementLeft 4
-#define pinMovementRight 3
-
-#define pinOpticalSensor 5
-#define thresholdOpticalSensor 400  
+int maxVerticalPosition = 200;
 
 byte action;
 #define ACTION_STARTUP 0
-#define ACTION_READY 1
+#define ACTION_RESET 1
+#define ACTION_READY 2
 
 YunServer server;
 
-
 void setup() {
-  pinMode(pinVerticalStop, INPUT);
-  digitalWrite(pinVerticalStop, HIGH);
-  pinMode(pinMovementLeft, INPUT);
-  digitalWrite(pinMovementLeft, HIGH);
-  pinMode(pinMovementRight, INPUT);
-  digitalWrite(pinMovementRight, HIGH);
+  pinMode(pinMovementLeft, INPUT_PULLUP);
+  pinMode(pinMovementRight, INPUT_PULLUP);
+  pinMode(pinMovementUp, INPUT_PULLUP);
+  pinMode(pinMovementDown, INPUT_PULLUP);
+  pinMode(pinFire, INPUT_PULLUP);
+  
+  pinMode(pinVerticalStopSensor, INPUT_PULLUP);
+  
+  pinMode(pinValveOn, OUTPUT);
+  pinMode(pinValveOff, OUTPUT);
   
   Bridge.begin();
   server.listenOnLocalhost();
@@ -51,14 +69,41 @@ void setup() {
   Serial.println("");
   
   action = ACTION_STARTUP;
-  initHorizontal();
 }
 
 void loop() {
-  readInput();
-  readRemoteInput();
+  
+  switch (action) {
+    case ACTION_STARTUP:
+      Serial.println("Startup");
+      initHorizontal();
+      initVertical();
+      action = ACTION_RESET;
+      break;
+        
+    case ACTION_RESET:
+      if ((currentHorizontalPosition == 0) && (currentVerticalPosition == 0)) {
+        action = ACTION_READY;
+        Serial.println("Reset Complete");
+      }
+      delay(10);
+      break;
+        
+    case ACTION_READY:
+      readInput();
+      readRemoteInput();
+      break;
+      
+  }
+  
+  if (fire == true) {
+      shoot();
+      fire = false;
+  }
   
   moveHorizontal();
+  moveVertical();
+  delay(10);
 }
 
 void readInput() {
@@ -68,11 +113,17 @@ void readInput() {
     }
   } else if (!digitalRead(pinMovementRight)) {
     newHorizontalPosition++;
+  } else if (!digitalRead(pinMovementDown)) {
+    if (digitalRead(pinMovementUp)) {
+      newVerticalPosition--;
+    }
+  } else if (!digitalRead(pinMovementUp)) {
+    newVerticalPosition++;
+  } else if (!digitalRead(pinFire)) {
+    if (!fire) {
+      fire = true;
+    }
   }
-  // Serial.print("current: ");
-  // Serial.print(currentHorizontalPosition);
-  // Serial.print(" - new: ");
-  // Serial.println(newHorizontalPosition);
 }
 
 void readRemoteInput() {
@@ -91,10 +142,24 @@ void readRemoteInput() {
       newHorizontalPosition = newHorizontalPosition - 10;
     } else if (command == "bigright") {
       newHorizontalPosition = newHorizontalPosition + 10;
+    } else if (command == "up") { 
+      newVerticalPosition++;
+    } else if (command == "down") {
+      newVerticalPosition--;
+    } else if (command == "bigup") {
+      newVerticalPosition = newVerticalPosition + 10;
+    } else if (command == "bigdown") {
+      newVerticalPosition = newVerticalPosition - 10;
+    } else if (command == "fire") {
+      fire = true;
     } 
 
     Serial.print("Command received: ");
     Serial.print(command);
+    Serial.print("    New Horizontal position: ");
+    Serial.print(newHorizontalPosition);
+    Serial.print(" - New Vertical position: ");
+    Serial.println(newVerticalPosition);
 
     client.println("Status: 200");
     client.println("Content-type: application/json");
@@ -102,20 +167,25 @@ void readRemoteInput() {
     client.print("{\"status\":\"ok\"}");
     client.stop();
   }
-  delay(50);
+  delay(10);
 }
 
 void initHorizontal() {
   Serial.println("InitHorizontal");
-  currentHorizontalPosition = 200;
+  currentHorizontalPosition = 600;
   newHorizontalPosition = 0;
-//  readMovementSpeed();
+}
+
+void initVertical() {
+  Serial.println("initVertical");
+  currentVerticalPosition = 200;
+  newVerticalPosition = 0;
 }
 
 void moveHorizontal() {
   readMovementSpeed();
   
-  if (action == ACTION_STARTUP) {
+  if (action == ACTION_RESET) {
     if (newHorizontalPosition >= maxHorizontalPosition) {
       newHorizontalPosition = maxHorizontalPosition;
     } else if (newHorizontalPosition <= 0) {
@@ -129,12 +199,11 @@ void moveHorizontal() {
       horizontalStepper.step(1);
     }
   } else if (newHorizontalPosition < currentHorizontalPosition) {
-    if (action == ACTION_STARTUP) {
-      if (readOpticalSensor(pinOpticalSensor)) {
+    if (action == ACTION_RESET) {
+      if (readHorizontalSensor(pinHorizontalStopSensor)) {
         currentHorizontalPosition--;
         horizontalStepper.step(-1);
       } else {
-        action = ACTION_READY;
         currentHorizontalPosition = 0;
       }
     } else {
@@ -144,11 +213,48 @@ void moveHorizontal() {
   }
 }
 
-bool readVerticalSensor() {
-  return digitalRead(pinVerticalStop);
+void moveVertical() {
+  readMovementSpeed();
+  
+  if (action == ACTION_RESET) {
+    if (newVerticalPosition >= maxVerticalPosition) {
+      newVerticalPosition = maxVerticalPosition;
+    } else if (newVerticalPosition <= 0) {
+      newVerticalPosition = 0;
+    }
+  }
+  
+  if (newVerticalPosition > currentVerticalPosition) {
+    if (currentVerticalPosition <= maxVerticalPosition) {
+      currentVerticalPosition++;
+      verticalStepper.step(1);
+    }
+  } else if (newVerticalPosition < currentVerticalPosition) {
+    if (readVerticalSensor()) {
+      currentVerticalPosition--;
+      verticalStepper.step(-1);
+    } else {
+      currentVerticalPosition = 0;
+    }
+  }
 }
 
-bool readOpticalSensor(uint8_t pin) {
+void shoot() {
+  digitalWrite(pinValveOn, 1);
+  digitalWrite(pinValveOff, 0);
+  delay(durationValveOpen);
+  digitalWrite(pinValveOn, 0);
+  digitalWrite(pinValveOff, 1);
+  delay(100);
+  digitalWrite(pinValveOn, 0);
+  digitalWrite(pinValveOff, 0);
+}
+
+bool readVerticalSensor() {
+  return digitalRead(pinVerticalStopSensor);
+}
+
+bool readHorizontalSensor(uint8_t pin) {
   pinMode(pin, OUTPUT);  
   digitalWrite(pin, HIGH);
   uint32_t t0 = micros();

@@ -14,7 +14,7 @@
 #define pinVerticalDirectionB 7
 
 #define pinVerticalStopSensor 8
-#define maxVerticalAngle -250
+#define maxVerticalAngle -350
 
 #define pinHorizontalStepB 9
 #define pinHorizontalDirectionB 10
@@ -79,6 +79,9 @@ void loop() {
       Serial.println("Startup");
       digitalWrite(pinValveOn, 0);
       digitalWrite(pinValveOff, 1);
+      delay(200);
+      digitalWrite(pinValveOff, 0);
+
       initHorizontal();
       initVertical();
       action = ACTION_RESET;
@@ -138,21 +141,21 @@ void readRemoteInput() {
     command.trim();
     
     if (command == "left") { // http://michelle.local/arduino/left
-      newHorizontalPosition = newHorizontalPosition + 5;
-    } else if (command == "right") {
-      newHorizontalPosition = newHorizontalPosition + 5;
-    } else if (command == "bigleft") {
       newHorizontalPosition = newHorizontalPosition - 20;
-    } else if (command == "bigright") {
+    } else if (command == "right") {
       newHorizontalPosition = newHorizontalPosition + 20;
+    } else if (command == "bigleft") {
+      newHorizontalPosition = newHorizontalPosition - 40;
+    } else if (command == "bigright") {
+      newHorizontalPosition = newHorizontalPosition + 40;
     } else if (command == "up") { 
-      newVerticalPosition = newVerticalPosition + 3;
-    } else if (command == "down") {
-      newVerticalPosition = newVerticalPosition - 3;
-    } else if (command == "bigup") {
       newVerticalPosition = newVerticalPosition + 20;
-    } else if (command == "bigdown") {
+    } else if (command == "down") {
       newVerticalPosition = newVerticalPosition - 20;
+    } else if (command == "bigup") {
+      newVerticalPosition = newVerticalPosition + 40;
+    } else if (command == "bigdown") {
+      newVerticalPosition = newVerticalPosition - 40;
     } else if (command == "fire") {
       fire = true;
     } else if (command == "reset") {

@@ -30,7 +30,7 @@
 
 #define pinValveOff 13
 #define pinValveOn 2
-#define durationValveOpen 500
+#define durationValveOpen 300
 
 #define STEPS 100
 
@@ -141,17 +141,17 @@ void readRemoteInput() {
     command.trim();
     
     if (command == "left") { // http://michelle.local/arduino/left
-      newHorizontalPosition = newHorizontalPosition - 20;
+      newHorizontalPosition = newHorizontalPosition - 10;
     } else if (command == "right") {
-      newHorizontalPosition = newHorizontalPosition + 20;
+      newHorizontalPosition = newHorizontalPosition + 10;
     } else if (command == "bigleft") {
       newHorizontalPosition = newHorizontalPosition - 40;
     } else if (command == "bigright") {
       newHorizontalPosition = newHorizontalPosition + 40;
     } else if (command == "up") { 
-      newVerticalPosition = newVerticalPosition + 20;
+      newVerticalPosition = newVerticalPosition + 10;
     } else if (command == "down") {
-      newVerticalPosition = newVerticalPosition - 20;
+      newVerticalPosition = newVerticalPosition - 10;
     } else if (command == "bigup") {
       newVerticalPosition = newVerticalPosition + 40;
     } else if (command == "bigdown") {
